@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>WTN — ดูโมเดล 3 มิติ</title>
+<!--
+  ════════════════════════════════════════════════════════════════════════
+  WTN 3D VIEWER — สคีมา v1 · ห้ามย้ายที่อยู่ไฟล์นี้ ห้ามแก้รูปแบบข้อมูล
+  ────────────────────────────────────────────────────────────────────────
+  QR บนกระดาษแบบชี้มาที่ไฟล์นี้ พร้อมข้อมูลตู้ทั้งใบอยู่หลัง # ในลิงก์
+  ส่วนหลัง # ไม่ถูกส่งไปเซิร์ฟเวอร์ → ไม่ต้องมีฐานข้อมูล ไม่ต้องล็อกอิน
+  ไฟล์นี้เป็นไฟล์นิ่งไฟล์เดียว วางไว้เฉยๆ ก็ใช้ได้ไปอีกสิบปี
+
+  แบบก่อสร้างอยู่ในแฟ้มหน้างานได้ 5–10 ปี ถ้าจะเปลี่ยนรูปแบบข้อมูล
+  ให้ทำเป็นสคีมา "2" แล้วเก็บตัวอ่านสคีมา "1" ไว้ตลอดไป
+  ไม่งั้น QR ที่ลูกค้าถืออยู่จะกลายเป็นกระดาษเปล่า
+  ════════════════════════════════════════════════════════════════════════
+-->
+<style>
+:root{--bg:#eceae4;--panel:#fbfaf7;--ink:#16202b;--ink2:#4a5763;--ink3:#7b8894;
+      --rule:#cfcbc2;--acc:#1d5b8f;--field:#fff}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);
+ font-family:'IBM Plex Sans Thai','Noto Sans Thai',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+ font-size:14px;line-height:1.4}
+#app{display:flex;flex-direction:column;height:100%}
+header{background:var(--panel);border-bottom:1px solid var(--rule);padding:8px 12px;flex:none}
+header .cd{font-size:16px;font-weight:600;letter-spacing:.02em}
+header .sb{font-size:11.5px;color:var(--ink3);margin-top:1px}
+#wrap{flex:1;position:relative;overflow:hidden;background:var(--bg)}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+#bar{flex:none;background:var(--panel);border-top:1px solid var(--rule);
+ padding:7px 8px;display:flex;gap:6px;overflow-x:auto}
+button{font:inherit;font-size:12.5px;padding:6px 11px;border:1px solid var(--rule);
+ background:var(--field);color:var(--ink);border-radius:3px;white-space:nowrap;cursor:pointer}
+button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+#info{position:absolute;left:8px;right:8px;bottom:8px;background:rgba(251,250,247,.97);
+ border:1px solid var(--rule);border-radius:4px;padding:9px 11px;display:none;
+ box-shadow:0 2px 10px rgba(22,32,43,.14)}
+#info.on{display:block}
+#info .n{font-weight:600;font-size:14px}
+#info .n i{font-style:normal;background:var(--acc);color:#fff;border-radius:2px;
+ padding:1px 6px;margin-right:6px;font-size:12.5px}
+#info .r{font-size:12px;color:var(--ink2);margin-top:3px}
+#info .x{position:absolute;top:4px;right:6px;color:var(--ink3);font-size:18px;
+ padding:2px 7px;cursor:pointer}
+#msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+ text-align:center;padding:24px;color:var(--ink2);font-size:14px}
+#hint{position:absolute;top:8px;left:8px;font-size:11px;color:var(--ink3);
+ background:rgba(251,250,247,.85);padding:3px 7px;border-radius:3px}
+</style>
+</head>
+<body>
+<div id="app">
+ <header><div class="cd" id="hCode">—</div><div class="sb" id="hSub"></div></header>
+ <div id="wrap">
+  <canvas id="cv"></canvas>
+  <div id="hint">ลากเพื่อหมุน · หนีบเพื่อซูม · แตะชิ้นเพื่อดูรายละเอียด</div>
+  <div id="info"><span class="x" id="iX">×</span><div class="n" id="iN"></div><div class="r" id="iR"></div></div>
+  <div id="msg" style="display:none"></div>
+ </div>
+ <div id="bar">
+  <button id="bExp">กางชิ้น</button>
+  <button id="bDim">ระยะ</button>
+  <button id="bNum">เลขชิ้น</button>
+  <button id="bDoor" class="on">หน้าบาน</button>
+  <button id="bHome">มุมเริ่มต้น</button>
+ </div>
+</div>
+<script>
+/* ══════════ ถอดรหัสข้อมูลจากลิงก์ (ต้องตรงกับ web/_payload.js เป๊ะ) ══════════ */
+var PNAME=['แผ่นหน้าขา','แผ่นพื้น','แผงซ้าย','แผงขวา','แผ่นท็อป','แผ่นหลัง',
+ 'คานหลัง ปาด 45°','คานหลัง','คานหน้า','ชั้นติดตาย','ชั้นปรับระดับ',
+ 'บานซ้าย','บานขวา','หน้าบาน บานพับซ้าย','หน้าบาน บานพับขวา','หน้าบาน เปิดขึ้นบน','หน้าบาน',
+ 'หน้าลิ้นชักใน','หน้าลิ้นชัก','ข้างกล่องลิ้นชักใน','ข้างกล่องลิ้นชัก',
+ 'หน้า–หลังกล่องใน','หน้า–หลังกล่อง','พื้นกล่องใน','พื้นกล่อง',
+ 'หน้าฟิลเลอร์','ฟิลเลอร์ข้างตู้ลิ้นชักใน','ขาฟิลเลอร์ ซ้าย','ขาฟิลเลอร์ ขวา','ขาฟิลเลอร์',
+ 'แผงข้างตู้ลิ้นชักใน','พื้น–บนตู้ลิ้นชักใน','ชิ้นงาน'];
+var GRPN=['body','door','back','drawer'];
+var GRPT={body:'โครงตู้',door:'หน้าบาน',back:'แผ่นหลัง',drawer:'กล่องลิ้นชัก'};
+var B64C='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+function d1(s){return B64C.indexOf(s);}
+function d2(s){return d1(s.charAt(0))*64+d1(s.charAt(1));}
+var POFF=512;
+function unb64uBytes(s){var b=[],i,v;
+ for(i=0;i<s.length;i+=4){
+  v=[d1(s.charAt(i)),d1(s.charAt(i+1)),
+     i+2<s.length?d1(s.charAt(i+2)):-1,i+3<s.length?d1(s.charAt(i+3)):-1];
+  b.push((v[0]<<2)|(v[1]>>4));
+  if(v[2]>=0)b.push(((v[1]&15)<<4)|(v[2]>>2));
+  if(v[3]>=0)b.push(((v[2]&3)<<6)|v[3]);}
+ return b;}
+function unpackTH(b){var s='',i,v;
+ for(i=0;i<b.length;i++){v=b[i];
+  if(v<0x80)s+=String.fromCharCode(v);
+  else if(v===0x80){s+=String.fromCharCode((b[i+1]<<8)|b[i+2]);i+=2;}
+  else s+=String.fromCharCode(0x0E00+(v-0x80));}
+ return s;}
+function qrRead(s){
+ var f=String(s||'').split('~');
+ if(f[0]!=='1')return null;
+ var sz=f[4]||'',g=f[5]||'',parts=[],i;
+ for(i=0;i+15<=g.length;i+=15)
+  parts.push({nm:PNAME[d1(g.charAt(i))]||'ชิ้นงาน',no:d1(g.charAt(i+1)),
+   grp:GRPN[d1(g.charAt(i+2))]||'body',
+   pos:[d2(g.substr(i+3,2))-POFF,d2(g.substr(i+5,2))-POFF,d2(g.substr(i+7,2))-POFF],
+   size:[d2(g.substr(i+9,2)),d2(g.substr(i+11,2)),d2(g.substr(i+13,2))]});
+ var pool=(f[6]||'').split('|').filter(function(x){return x!=='';});
+ var ix=(f[7]||'.').split('.');
+ var pick=function(t){return (t||'').split('').map(function(c){return pool[d1(c)]||'';});};
+ return {code:f[1]||'',nm:f[2]||'',proj:f[3]||'',
+  w:d2(sz.substr(0,2)),d:d2(sz.substr(2,2)),h:d2(sz.substr(4,2)),qty:d1(sz.charAt(6))||1,
+  parts:parts,mats:pick(ix[0]),edges:pick(ix[1])};}
+
+/* ══════════ ทิศกางชิ้น — ต้องตรงกับ expDir ในโปรแกรมหลัก ══════════ */
+var EXP_MIN=55,EXP_MAX=200,EXP_F=0.15;
+function expBase(m){return Math.min(EXP_MAX,Math.max(EXP_MIN,Math.max(m.w,m.d,m.h)*EXP_F));}
+function expDir(p,m,ctr){
+ var n=p.nm,r=p.grp,st=function(k){return n.indexOf(k)===0;};
+ if(st('แผงซ้าย'))return [-1.15,0,0];
+ if(st('แผงขวา'))return [1.15,0,0];
+ if(st('แผงข้าง'))return [p.pos[0]<m.w/2?-1.15:1.15,0,0];
+ if(st('แผ่นท็อป')||st('พื้น–บน'))return [0,0,1.2];
+ if(st('แผ่นพื้น'))return [0,0,-1.2];
+ if(st('แผ่นหน้าขา'))return [0,-0.6,-2.0];
+ if(st('แผ่นหลัง'))return [0,1.6,0];
+ if(st('คานหลัง'))return [0,1.1,0.55];
+ if(st('คานหน้า'))return [0,-1.3,0.65];
+ if(st('ขาฟิลเลอร์'))return [p.pos[0]>0?1.3:-1.3,0,0];
+ if(st('หน้าฟิลเลอร์'))return [0,-2.4,0];
+ if(st('ชั้น'))return [0,-(1.7+(ctr.s++)*0.6),0.25];
+ if(r==='door')return [0,-3.0,-0.9];
+ return [0,-1.2,0];}
+function isDoorPart(p){return p.grp==='door';}
+
+/* ══════════ วาด 3 มิติ — เขียนเอง ไม่พึ่งไลบรารี ══════════
+   ชิ้นงานเป็นกล่องสี่เหลี่ยมล้วน ใช้เรียงตามระยะ (painter) + ตัดหน้าที่หันหนีกล้อง
+   ได้ภาพถูกต้องโดยไม่ต้องโหลด three.js 600 KB — เปิดเร็วบนเน็ตหน้างานที่ช้า */
+var SHADE={body:['#e4d3b4','#d3bd94','#f0e3cc'],back:['#dcdce0','#c6c6cc','#ececf0'],
+ door:['#b9d0e6','#9cb9d4','#d3e3f1'],drawer:['#ded4e8','#c8b9d6','#ece5f2']};
+var SEL=['#f6c9a0','#eab27e','#fbe0c4'];
+var HOME={yaw:-0.62,pitch:0.42,zoom:1};
+var V={yaw:HOME.yaw,pitch:HOME.pitch,zoom:1,px:0,py:0};
+var M=null,EXP=0,EXPT=0,SHOWDIM=0,SHOWNUM=0,SHOWDOOR=1,PICK=-1,FACES=[];
+var cv=document.getElementById('cv'),ctx=cv.getContext('2d'),DPR=1;
+
+function partsNow(){
+ if(!M)return [];
+ var ctr={s:0},b=expBase(M)*EXPT;
+ return M.parts.map(function(p,i){
+  var d=EXPT>0?expDir(p,M,ctr):[0,0,0];
+  return {i:i,p:p,off:[d[0]*b,d[1]*b,d[2]*b]};});}
+
+function rot(x,y,z){
+ var cy=Math.cos(V.yaw),sy=Math.sin(V.yaw),cp=Math.cos(V.pitch),sp=Math.sin(V.pitch);
+ var x1=x*cy-y*sy, y1=x*sy+y*cy;
+ return [x1, y1*cp-z*sp, y1*sp+z*cp];}
+function camDir(){ // เวกเตอร์ชี้จากฉากไปหากล้อง (พิกัดวัตถุ)
+ var cy=Math.cos(V.yaw),sy=Math.sin(V.yaw),cp=Math.cos(V.pitch),sp=Math.sin(V.pitch);
+ return [-cp*sy,-cp*cy,sp];}
+
+var NRM=[[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]];
+function boxFaces(x0,y0,z0,x1,y1,z1){
+ return [[[x0,y0,z0],[x0,y1,z0],[x0,y1,z1],[x0,y0,z1]],
+         [[x1,y0,z0],[x1,y1,z0],[x1,y1,z1],[x1,y0,z1]],
+         [[x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1]],
+         [[x0,y1,z0],[x1,y1,z0],[x1,y1,z1],[x0,y1,z1]],
+         [[x0,y0,z0],[x1,y0,z0],[x1,y1,z0],[x0,y1,z0]],
+         [[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]]];}
+
+function build(){
+ FACES=[];
+ if(!M)return {k:1,cx:0,cy:0};
+ var list=partsNow().filter(function(e){return SHOWDOOR||!isDoorPart(e.p);});
+ var cd=camDir(),ctr=[M.w/2,M.d/2,M.h/2];
+ var minx=1e9,maxx=-1e9,miny=1e9,maxy=-1e9;
+ var raw=[];
+ list.forEach(function(e){
+  var p=e.p,f=e.off;
+  var x0=p.pos[0]+f[0],y0=p.pos[1]+f[1],z0=p.pos[2]+f[2];
+  var x1=x0+p.size[0],y1=y0+p.size[1],z1=z0+p.size[2];
+  var fs=boxFaces(x0,y0,z0,x1,y1,z1),fc=[(x0+x1)/2,(y0+y1)/2,(z0+z1)/2];
+  fs.forEach(function(q,fi){
+   var n=NRM[fi];
+   var qc=[(q[0][0]+q[2][0])/2,(q[0][1]+q[2][1])/2,(q[0][2]+q[2][2])/2];
+   /* ตัดหน้าที่หันหนีกล้อง — เทียบจากจุดกึ่งกลางหน้าไปหากล้อง */
+   if(n[0]*cd[0]+n[1]*cd[1]+n[2]*cd[2]<=0.0001)return;
+   var pr=q.map(function(v){return rot(v[0]-ctr[0],v[1]-ctr[1],v[2]-ctr[2]);});
+   var dep=0;pr.forEach(function(v){dep+=v[1];});dep/=4;
+   pr.forEach(function(v){if(v[0]<minx)minx=v[0];if(v[0]>maxx)maxx=v[0];
+                          if(-v[2]<miny)miny=-v[2];if(-v[2]>maxy)maxy=-v[2];});
+   raw.push({i:e.i,g:p.grp,sh:fi<2?0:(fi<4?1:2),pr:pr,dep:dep,ctr:rot(fc[0]-ctr[0],fc[1]-ctr[1],fc[2]-ctr[2])});
+  });});
+ raw.sort(function(a,b){return b.dep-a.dep;});   // ไกลก่อน ใกล้ทีหลัง
+ FACES=raw;
+ var W=cv.width/DPR,H=cv.height/DPR;
+ var k=Math.min((W-40)/Math.max(maxx-minx,1),(H-40)/Math.max(maxy-miny,1))*V.zoom;
+ return {k:k,cx:W/2-((minx+maxx)/2)*k+V.px,cy:H/2-((miny+maxy)/2)*k+V.py};}
+
+function draw(){
+ var W=cv.width/DPR,H=cv.height/DPR;
+ ctx.setTransform(DPR,0,0,DPR,0,0);
+ ctx.clearRect(0,0,W,H);
+ var vw=build();
+ var P=function(v){return [vw.cx+v[0]*vw.k, vw.cy-v[2]*vw.k];};
+ FACES.forEach(function(f){
+  var sh=(f.i===PICK?SEL:(SHADE[f.g]||SHADE.body))[f.sh];
+  ctx.beginPath();
+  f.pr.forEach(function(v,j){var s=P(v);if(j)ctx.lineTo(s[0],s[1]);else ctx.moveTo(s[0],s[1]);});
+  ctx.closePath();
+  ctx.fillStyle=sh;ctx.fill();
+  ctx.strokeStyle=f.i===PICK?'#c0651e':'rgba(0,0,0,.26)';
+  ctx.lineWidth=f.i===PICK?1.6:0.8;ctx.stroke();
+  f.sxy=f.pr.map(P);
+ });
+ if(SHOWNUM)drawNums(P,vw);
+ if(SHOWDIM)drawDims(P,vw);
+}
+function drawNums(P,vw){
+ if(!M)return;
+ var seen={},put=[];
+ ctx.font='600 11px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+ /* วางเลขบนหน้าที่มองเห็นจริงของชิ้นนั้น (หน้าที่วาดทีหลังสุด = อยู่หน้าสุด) */
+ var best={};
+ FACES.forEach(function(f,idx){
+  if(!SHOWDOOR&&M.parts[f.i]&&isDoorPart(M.parts[f.i]))return;
+  best[f.i]=idx;});
+ Object.keys(best).forEach(function(i){
+  var f=FACES[best[i]],p=M.parts[+i];
+  if(!p||seen[p.no])return; seen[p.no]=1;
+  var s=[0,0];f.sxy.forEach(function(v){s[0]+=v[0];s[1]+=v[1];});
+  s[0]/=4;s[1]/=4;
+  put.push({x:s[0],y:s[1],n:p.no});});
+ /* ดันวงเลขที่ทับกันให้แยกออก — สองชิ้นที่กางไปทางเดียวกันมักได้จุดกึ่งกลางใกล้กัน */
+ for(var pass=0;pass<12;pass++){var moved=false;
+  for(var a=0;a<put.length;a++)for(var b2=a+1;b2<put.length;b2++){
+   var dx=put[b2].x-put[a].x,dy=put[b2].y-put[a].y,dd=Math.hypot(dx,dy);
+   if(dd<21&&dd>0.01){var k=(21-dd)/2/dd;
+    put[a].x-=dx*k;put[a].y-=dy*k;put[b2].x+=dx*k;put[b2].y+=dy*k;moved=true;}}
+  if(!moved)break;}
+ put.forEach(function(q){
+  ctx.fillStyle='rgba(29,91,143,.92)';
+  ctx.beginPath();ctx.arc(q.x,q.y,9,0,6.2832);ctx.fill();
+  ctx.fillStyle='#fff';ctx.fillText(String(q.n),q.x,q.y+0.5);});}
+function drawDims(P,vw){
+ if(!M)return;
+ var ctr=[M.w/2,M.d/2,M.h/2];
+ var L=function(a,b,txt){
+  var A=P(rot(a[0]-ctr[0],a[1]-ctr[1],a[2]-ctr[2])),B=P(rot(b[0]-ctr[0],b[1]-ctr[1],b[2]-ctr[2]));
+  ctx.strokeStyle='#c0651e';ctx.lineWidth=1.2;
+  ctx.beginPath();ctx.moveTo(A[0],A[1]);ctx.lineTo(B[0],B[1]);ctx.stroke();
+  ctx.font='600 11px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  var mx=(A[0]+B[0])/2,my=(A[1]+B[1])/2,tw=ctx.measureText(txt).width;
+  ctx.fillStyle='rgba(251,250,247,.92)';ctx.fillRect(mx-tw/2-3,my-8,tw+6,16);
+  ctx.fillStyle='#8a4512';ctx.fillText(txt,mx,my);};
+ var o=-Math.max(M.w,M.d,M.h)*0.06;
+ L([0,o,0],[M.w,o,0],M.w+' มม.');
+ L([M.w,0,o],[M.w,M.d,o],M.d+' มม.');
+ L([o,o,0],[o,o,M.h],M.h+' มม.');}
+
+/* ══════════ แตะเลือกชิ้น ══════════ */
+function inPoly(x,y,q){
+ var sg=0,i,a,b,cr,s;
+ for(i=0;i<q.length;i++){a=q[i];b=q[(i+1)%q.length];
+  cr=(b[0]-a[0])*(y-a[1])-(b[1]-a[1])*(x-a[0]);
+  if(Math.abs(cr)<1e-9)continue;
+  s=cr>0?1:-1; if(!sg)sg=s; else if(s!==sg)return false;}
+ return true;}
+function pickAt(x,y){
+ for(var i=FACES.length-1;i>=0;i--) if(FACES[i].sxy&&inPoly(x,y,FACES[i].sxy))return FACES[i].i;
+ return -1;}
+function showInfo(i){
+ var el=document.getElementById('info');
+ if(i<0||!M){el.className='';PICK=-1;draw();return;}
+ var p=M.parts[i],s=p.size.slice().sort(function(a,b){return b-a;});
+ var gi=GRPN.indexOf(p.grp);
+ var mat=(M.mats&&M.mats[gi])||'', ed=(M.edges&&M.edges[gi])||'';
+ var n=0;M.parts.forEach(function(q){if(q.no===p.no)n++;});
+ document.getElementById('iN').innerHTML='<i>'+p.no+'</i>'+p.nm+(n>1?' <span style="color:#7b8894;font-weight:400">× '+n+' ชิ้น</span>':'');
+ document.getElementById('iR').textContent=
+  'ยาว × กว้าง × หนา  '+s[0]+' × '+s[1]+' × '+s[2]+' มม.'
+  +' · '+(GRPT[p.grp]||p.grp)+(mat?' — '+mat:'')+(ed?' · ปิดขอบ: '+ed:'');
+ el.className='on';PICK=i;draw();}
+document.getElementById('iX').onclick=function(e){e.stopPropagation();showInfo(-1);};
+
+/* ══════════ นิ้ว / เมาส์ ══════════ */
+var drag=null,pinch=null,moved=0;
+function xy(e){var r=cv.getBoundingClientRect();
+ return [e.clientX-r.left,e.clientY-r.top];}
+cv.addEventListener('pointerdown',function(e){
+ cv.setPointerCapture(e.pointerId);
+ drag={x:e.clientX,y:e.clientY,yaw:V.yaw,pitch:V.pitch};moved=0;});
+cv.addEventListener('pointermove',function(e){
+ if(!drag||pinch)return;
+ var dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+ moved=Math.max(moved,Math.abs(dx)+Math.abs(dy));
+ V.yaw=drag.yaw+dx*0.008;
+ V.pitch=Math.max(-1.45,Math.min(1.45,drag.pitch-dy*0.008));
+ draw();});
+cv.addEventListener('pointerup',function(e){
+ if(drag&&moved<6){var q=xy(e);showInfo(pickAt(q[0],q[1]));}
+ drag=null;});
+cv.addEventListener('pointercancel',function(){drag=null;});
+cv.addEventListener('wheel',function(e){e.preventDefault();
+ V.zoom=Math.max(0.35,Math.min(4,V.zoom*(e.deltaY<0?1.12:0.89)));draw();},{passive:false});
+var tp={};
+cv.addEventListener('touchstart',function(e){
+ if(e.touches.length===2){drag=null;
+  pinch={d:tdist(e),z:V.zoom};}},{passive:true});
+cv.addEventListener('touchmove',function(e){
+ if(pinch&&e.touches.length===2){e.preventDefault();
+  V.zoom=Math.max(0.35,Math.min(4,pinch.z*(tdist(e)/pinch.d)));draw();}},{passive:false});
+cv.addEventListener('touchend',function(e){if(e.touches.length<2)pinch=null;});
+function tdist(e){var a=e.touches[0],b=e.touches[1];
+ return Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);}
+
+/* ══════════ ปุ่ม ══════════ */
+function anim(to){
+ var from=EXPT,t0=Date.now(),dur=460;
+ (function step(){
+  var t=Math.min(1,(Date.now()-t0)/dur);
+  var e=t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;      // ease in-out
+  EXPT=from+(to-from)*e;draw();
+  if(t<1)requestAnimationFrame(step);})();}
+document.getElementById('bExp').onclick=function(){
+ EXP=!EXP;this.className=EXP?'on':'';this.textContent=EXP?'ประกอบกลับ':'กางชิ้น';
+ showInfo(-1);anim(EXP?1:0);};
+document.getElementById('bDim').onclick=function(){
+ SHOWDIM=!SHOWDIM;this.className=SHOWDIM?'on':'';draw();};
+document.getElementById('bNum').onclick=function(){
+ SHOWNUM=!SHOWNUM;this.className=SHOWNUM?'on':'';draw();};
+document.getElementById('bDoor').onclick=function(){
+ SHOWDOOR=!SHOWDOOR;this.className=SHOWDOOR?'on':'';showInfo(-1);draw();};
+document.getElementById('bHome').onclick=function(){
+ V.yaw=HOME.yaw;V.pitch=HOME.pitch;V.zoom=1;V.px=0;V.py=0;draw();};
+
+/* ══════════ เริ่มทำงาน ══════════ */
+function resize(){
+ DPR=Math.min(2,window.devicePixelRatio||1);
+ var w=cv.parentNode.clientWidth,h=cv.parentNode.clientHeight;
+ cv.width=w*DPR;cv.height=h*DPR;cv.style.width=w+'px';cv.style.height=h+'px';
+ draw();}
+window.addEventListener('resize',resize);
+function fail(t){
+ document.getElementById('msg').style.display='flex';
+ document.getElementById('msg').innerHTML=t;
+ document.getElementById('hint').style.display='none';
+ document.getElementById('bar').style.display='none';}
+function start(){
+ var h=(location.hash||'').replace(/^#/,'');
+ if(!h){fail('เปิดหน้านี้ด้วยการสแกน QR บนแบบเฟอร์นิเจอร์<br>'
+  +'<span style="font-size:12px;color:#7b8894">ลิงก์ที่ไม่มีข้อมูลตู้จะแสดงหน้านี้</span>');return;}
+ try{M=qrRead(unpackTH(unb64uBytes(h)));}catch(e){M=null;}
+ if(!M||!M.parts.length){fail('อ่านข้อมูลตู้จากลิงก์ไม่ได้<br>'
+  +'<span style="font-size:12px;color:#7b8894">ลิงก์อาจไม่ครบ ลองสแกนใหม่อีกครั้ง</span>');return;}
+ document.getElementById('hCode').textContent=M.code+(M.nm?'  '+M.nm:'');
+ document.getElementById('hSub').textContent=
+  (M.proj?M.proj+'  ·  ':'')+M.w+' × '+M.d+' × '+M.h+' มม.'
+  +(M.qty>1?'  ·  '+M.qty+' ใบ':'')+'  ·  '+M.parts.length+' ชิ้น';
+ document.title=M.code+' — WTN';
+ resize();
+ setTimeout(function(){var e=document.getElementById('hint');if(e)e.style.display='none';},5000);}
+window.addEventListener('hashchange',function(){location.reload();});
+start();
+</script>
+</body>
+</html>
